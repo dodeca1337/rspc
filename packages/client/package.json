@@ -22,6 +22,9 @@
     "build": "tsup",
     "prepare": "tsup"
   },
+  "dependencies": {
+    "@msgpack/msgpack": "^2.8.0"
+  },
   "devDependencies": {
     "tsup": "^8.0.2",
     "typescript": "^5.4.2"

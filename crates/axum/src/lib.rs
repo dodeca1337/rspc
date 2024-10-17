@@ -20,7 +20,6 @@ use rspc::internal::{
     jsonrpc::{self, handle_json_rpc, RequestId, Sender, SubscriptionMap},
     ProcedureKind,
 };
-use serde_json::Value;
 
 mod extractors;
 
@@ -46,7 +45,6 @@ where
 
                     match (req.method(), &req.uri().path()[1..]) {
                         (&Method::GET, "ws") => {
-                            #[cfg(feature = "ws")]
                             {
                                 let mut req = req;
                                 return req
@@ -58,24 +56,13 @@ where
                                     })
                                     .into_response();
                             }
-
-                            #[cfg(not(feature = "ws"))]
+                        }
+                        _ => {
                             Response::builder()
                                 .status(StatusCode::NOT_FOUND)
                                 .body(Body::from("[]")) // TODO: Better error message which frontend is actually setup to handle.
                                 .unwrap()
                         }
-                        (&Method::GET, _) => {
-                            handle_http(ctx_fn, ProcedureKind::Query, req, &router)
-                                .await
-                                .into_response()
-                        }
-                        (&Method::POST, _) => {
-                            handle_http(ctx_fn, ProcedureKind::Mutation, req, &router)
-                                .await
-                                .into_response()
-                        }
-                        _ => unreachable!(),
                     }
                 }
             },
@@ -83,136 +70,6 @@ where
     )
 }
 
-async fn handle_http<TCtx, TCtxFn, TCtxFnMarker>(
-    ctx_fn: TCtxFn,
-    kind: ProcedureKind,
-    req: Request,
-    router: &Arc<rspc::Router<TCtx>>,
-) -> impl IntoResponse
-where
-    TCtx: Send + Sync + 'static,
-    TCtxFn: TCtxFunc<TCtx, TCtxFnMarker>,
-{
-    let procedure_name = req.uri().path()[1..].to_string(); // Has to be allocated because `TCtxFn` takes ownership of `req`
-    let (parts, body) = req.into_parts();
-    let input = match parts.method {
-        Method::GET => parts
-            .uri
-            .query()
-            .map(|query| form_urlencoded::parse(query.as_bytes()))
-            .and_then(|mut params| params.find(|e| e.0 == "input").map(|e| e.1))
-            .map(|v| serde_json::from_str(&v))
-            .unwrap_or(Ok(None as Option<Value>)),
-        Method::POST => {
-            // TODO: Limit body size?
-            let body = to_bytes(body, usize::MAX).await.unwrap(); // TODO: error handling
-            (!body.is_empty())
-                .then(|| serde_json::from_slice(body.to_vec().as_slice()))
-                .unwrap_or(Ok(None))
-        }
-        _ => unreachable!(),
-    };
-
-    let input = match input {
-        Ok(input) => input,
-        Err(_err) => {
-            #[cfg(feature = "tracing")]
-            tracing::error!(
-                "Error passing parameters to operation '{}' with key '{:?}': {}",
-                kind.to_str(),
-                procedure_name,
-                _err
-            );
-
-            return Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .header("Content-Type", "application/json")
-                .body(Body::from(b"[]".as_slice()))
-                .unwrap();
-        }
-    };
-
-    #[cfg(feature = "tracing")]
-    tracing::debug!(
-        "Executing operation '{}' with key '{}' with params {:?}",
-        kind.to_str(),
-        procedure_name,
-        input
-    );
-
-    let mut resp = Sender::Response(None);
-
-    let ctx = ctx_fn.exec(parts);
-
-    let ctx = match ctx {
-        Ok(v) => v,
-        Err(_err) => {
-            #[cfg(feature = "tracing")]
-            tracing::error!("Error executing context function: {}", _err);
-
-            return Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .header("Content-Type", "application/json")
-                .body(Body::from(b"[]".as_slice()))
-                .unwrap();
-        }
-    };
-
-    handle_json_rpc(
-        ctx,
-        jsonrpc::Request {
-            jsonrpc: None,
-            id: RequestId::Null,
-            inner: match kind {
-                ProcedureKind::Query => jsonrpc::RequestInner::Query {
-                    path: procedure_name.to_string(), // TODO: Lifetime instead of allocate?
-                    input,
-                },
-                ProcedureKind::Mutation => jsonrpc::RequestInner::Mutation {
-                    path: procedure_name.to_string(), // TODO: Lifetime instead of allocate?
-                    input,
-                },
-                ProcedureKind::Subscription => {
-                    #[cfg(feature = "tracing")]
-                    tracing::error!("Attempted to execute a subscription operation with HTTP");
-
-                    return Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .header("Content-Type", "application/json")
-                        .body(Body::from(b"[]".as_slice()))
-                        .unwrap();
-                }
-            },
-        },
-        router,
-        &mut resp,
-        &mut SubscriptionMap::None,
-    )
-    .await;
-
-    match resp {
-        Sender::Response(Some(resp)) => match serde_json::to_vec(&resp) {
-            Ok(v) => Response::builder()
-                .status(StatusCode::OK)
-                .header("Content-Type", "application/json")
-                .body(Body::from(v))
-                .unwrap(),
-            Err(_err) => {
-                #[cfg(feature = "tracing")]
-                tracing::error!("Error serializing response: {}", _err);
-
-                Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .header("Content-Type", "application/json")
-                    .body(Body::from(b"[]".as_slice()))
-                    .unwrap()
-            }
-        },
-        _ => unreachable!(),
-    }
-}
-
-#[cfg(feature = "ws")]
 async fn handle_websocket<TCtx, TCtxFn, TCtxFnMarker>(
     ctx_fn: TCtxFn,
     mut socket: axum::extract::ws::WebSocket,
@@ -231,12 +88,11 @@ async fn handle_websocket<TCtx, TCtxFn, TCtxFnMarker>(
 
     let mut subscriptions = HashMap::new();
     let (mut tx, mut rx) = mpsc::channel::<jsonrpc::Response>(100);
-
     loop {
         tokio::select! {
             biased; // Note: Order is important here
             msg = rx.recv() => {
-                match socket.send(Message::Text(match serde_json::to_string(&msg) {
+                match socket.send(Message::Binary(match rmp_serde::to_vec_named(&msg) {
                     Ok(v) => v,
                     Err(_err) => {
                         #[cfg(feature = "tracing")]
@@ -254,36 +110,33 @@ async fn handle_websocket<TCtx, TCtxFn, TCtxFnMarker>(
                     }
                 }
             }
+
+
             msg = socket.next() => {
                 match msg {
                     Some(Ok(msg)) => {
                        let res = match msg {
-                            Message::Text(text) => serde_json::from_str::<Value>(&text),
-                            Message::Binary(binary) => serde_json::from_slice(&binary),
+                            Message::Text(text) => rmp_serde::from_slice::<jsonrpc::Request>(text.as_bytes()),
+                            Message::Binary(binary) => rmp_serde::from_slice(&binary),
                             Message::Ping(_) | Message::Pong(_) | Message::Close(_) => {
                                 continue;
                             }
                         };
 
-                        match res.and_then(|v| match v.is_array() {
-                                true => serde_json::from_value::<Vec<jsonrpc::Request>>(v),
-                                false => serde_json::from_value::<jsonrpc::Request>(v).map(|v| vec![v]),
-                            }) {
-                            Ok(reqs) => {
-                                for request in reqs {
-                                    let ctx = ctx_fn.exec(parts.clone());
+                        match res {
+                            Ok(request) => {
+                                let ctx = ctx_fn.exec(parts.clone());
 
-                                    handle_json_rpc(match ctx {
-                                        Ok(v) => v,
-                                        Err(_err) => {
-                                            #[cfg(feature = "tracing")]
-                                            tracing::error!("Error executing context function: {}", _err);
+                                handle_json_rpc(match ctx {
+                                    Ok(v) => v,
+                                    Err(_err) => {
+                                        #[cfg(feature = "tracing")]
+                                        tracing::error!("Error executing context function: {}", _err);
 
-                                            continue;
-                                        }
-                                    }, request, &router, &mut Sender::Channel(&mut tx),
-                                    &mut SubscriptionMap::Ref(&mut subscriptions)).await;
-                                }
+                                        continue;
+                                    }
+                                }, request, &router, &mut Sender::Channel(&mut tx),
+                                &mut SubscriptionMap::Ref(&mut subscriptions)).await;
                             },
                             Err(_err) => {
                                 #[cfg(feature = "tracing")]
