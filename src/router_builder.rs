@@ -215,9 +215,9 @@ where
             MiddlewareBuilderLike<TLayerCtx, LayerContext = TNewLayerCtx> + Send + 'static,
     {
         #[allow(clippy::panic)]
-        if prefix.is_empty() || prefix.starts_with("rpc.") || prefix.starts_with("rspc.") {
+        if prefix.is_empty() || prefix.starts_with("rpc.") || prefix.starts_with("drspc.") {
             panic!(
-                "rspc error: attempted to merge a router with the prefix '{}', however this name is not allowed.",
+                "drspc error: attempted to merge a router with the prefix '{}', however this name is not allowed.",
                 prefix
             );
         }
@@ -278,9 +278,9 @@ where
             MiddlewareBuilderLike<TLayerCtx, LayerContext = TNewLayerCtx> + Send + 'static,
     {
         #[allow(clippy::panic)]
-        if prefix.is_empty() || prefix.starts_with("rpc.") || prefix.starts_with("rspc.") {
+        if prefix.is_empty() || prefix.starts_with("rpc.") || prefix.starts_with("drspc.") {
             panic!(
-                "rspc error: attempted to merge a router with the prefix '{}', however this name is not allowed.",
+                "drspc error: attempted to merge a router with the prefix '{}', however this name is not allowed.",
                 prefix
             );
         }

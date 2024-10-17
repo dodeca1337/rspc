@@ -1,8 +1,11 @@
 [package]
-name = "rspc"
+name = "drspc"
 description = "A blazing fast and easy to use TRPC server for Rust."
 version = "0.2.0"
-authors = ["Oscar Beaumont <oscar@otbeaumont.me>"]
+authors = [
+    "Oscar Beaumont <oscar@otbeaumont.me>",
+    "Dodeca Shaven <dodeca256@gmail.com>",
+]
 edition = "2021"
 license = "MIT"
 include = ["/src", "/LICENCE", "/README.md"]

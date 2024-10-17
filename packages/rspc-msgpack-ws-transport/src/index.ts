@@ -1,6 +1,6 @@
 // TODO: Redo this entire system when links are introduced
 // TODO: Make this file work off Typescript types which are exported from Rust to ensure internal type-safety!
-import { OperationType, RSPCError } from ".";
+import { OperationType, RSPCError } from "@rspc/client";
 import { encode, decode } from "@msgpack/msgpack";
 
 // TODO
@@ -29,6 +29,7 @@ export class WebsocketTransport implements Transport {
   constructor(url: string) {
     this.url = url;
     this.ws = new WebSocket(url);
+    this.ws.binaryType = "arraybuffer"
     this.attachEventListeners();
   }
 
@@ -73,6 +74,7 @@ export class WebsocketTransport implements Transport {
 
     setTimeout(() => {
       let ws = new WebSocket(this.url);
+      this.ws.binaryType = "arraybuffer"
       new Promise(function (resolve, reject) {
         ws.addEventListener("open", () => resolve(null));
         ws.addEventListener("close", reject);

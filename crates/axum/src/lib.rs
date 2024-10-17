@@ -15,16 +15,16 @@ use axum::{
     routing::{on, MethodFilter},
     RequestExt, Router,
 };
-use extractors::TCtxFunc;
-use rspc::internal::{
+use drspc::internal::{
     jsonrpc::{self, handle_json_rpc, RequestId, Sender, SubscriptionMap},
     ProcedureKind,
 };
+use extractors::TCtxFunc;
 
 mod extractors;
 
 pub fn endpoint<TCtx, TCtxFnMarker, TCtxFn, S>(
-    router: Arc<rspc::Router<TCtx>>,
+    router: Arc<drspc::Router<TCtx>>,
     ctx_fn: TCtxFn,
 ) -> Router<S>
 where
@@ -74,7 +74,7 @@ async fn handle_websocket<TCtx, TCtxFn, TCtxFnMarker>(
     ctx_fn: TCtxFn,
     mut socket: axum::extract::ws::WebSocket,
     parts: Parts,
-    router: Arc<rspc::Router<TCtx>>,
+    router: Arc<drspc::Router<TCtx>>,
 ) where
     TCtx: Send + Sync + 'static,
     TCtxFn: TCtxFunc<TCtx, TCtxFnMarker>,

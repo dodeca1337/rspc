@@ -111,7 +111,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "rspc::Error {{ code: {:?}, message: {} }}",
+            "drspc::Error {{ code: {:?}, message: {} }}",
             self.code, self.message
         )
     }

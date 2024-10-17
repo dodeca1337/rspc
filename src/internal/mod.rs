@@ -1,4 +1,4 @@
-//! Internal types which power rspc. The module provides no guarantee of compatibility between updates, so you should be careful rely on types from it.
+//! Internal types which power drspc. The module provides no guarantee of compatibility between updates, so you should be careful rely on types from it.
 
 mod execute;
 pub mod jsonrpc;

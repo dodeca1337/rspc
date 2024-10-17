@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "moduleResolution": "node",
+        "outDir": "dist/types",
+        "lib": [
+            "ESNext",
+            "DOM"
+        ],
+        "strict": true,
+        "target": "ESNext",
+        "skipLibCheck": true,
+        "declaration": true,
+        "emitDeclarationOnly": true,
+        "declarationMap": true,
+    },
+    "include": [
+        "src/**/*"
+    ],
+    "exclude": [
+        "dist/**/*",
+        "src/**/*.test.*"
+    ]
+}
